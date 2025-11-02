@@ -1,0 +1,47 @@
+plugins {
+    // Use the latest Loom as of 2025-11 per Fabric maven metadata
+    id 'fabric-loom' version '1.13.0-alpha.8'
+    id 'maven-publish'
+}
+
+group = 'com.bravo68web'
+version = project.mod_version
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    mavenCentral()
+    maven { url 'https://maven.fabricmc.net/' }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    mappings "net.fabricmc:yarn:${yarn_mappings}:v2"
+    modImplementation "net.fabricmc:fabric-loader:${loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
+    include(implementation('com.google.code.gson:gson:2.10.1'))
+}
+
+loom {
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    withSourcesJar()
+}
+
+processResources {
+    inputs.property "version", project.version
+    filesMatching('fabric.mod.json') {
+        expand "version": project.version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21
+    options.encoding = 'UTF-8'
+}

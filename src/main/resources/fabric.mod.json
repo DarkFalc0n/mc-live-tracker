@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "mclivetracker",
+  "version": "${version}",
+  "name": "MC Live Tracker",
+  "description": "Starts a web server on port 27134 to display seed map tiles and live player positions.",
+  "authors": ["BRAVO68WEB"],
+  "contact": {
+    "sources": "https://github.com/BRAVO68WEB/mc-live-tracker"
+  },
+  "license": "MIT",
+  "icon": "",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["com.bravo68web.mclivetracker.McLiveTrackerMod"]
+  },
+  "depends": {
+    "fabricloader": ">=0.17.3",
+    "fabric-api": "*",
+    "minecraft": ">=1.21.10"
+  }
+}
