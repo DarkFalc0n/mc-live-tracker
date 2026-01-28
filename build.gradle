@@ -25,6 +25,14 @@ dependencies {
 }
 
 loom {
+    runs {
+        all {
+            // Forward the dev web root property if present
+            if (System.getProperty("mclivetracker.dev.web-root")) {
+                vmArg "-Dmclivetracker.dev.web-root=${System.getProperty('mclivetracker.dev.web-root')}"
+            }
+        }
+    }
 }
 
 java {

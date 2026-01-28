@@ -41,5 +41,34 @@ Requires Java 17. If you don't have Gradle, install it (for example via SDKMAN) 
 - Replace `TileRenderer.renderPlaceholderPng` with a renderer backed by Cubiomes. Expose world seed and dimension handling, cache tiles, and implement zoom/projection.
 - Improve UI (panning/zooming, layers, markers). Consider a tile scheme like `z/x/y` in Web Mercator-like projection for overworld.
 
+## Development Workflow
+Instead of manually building and copying the JAR, you can run the mod and web app in a development environment.
+
+### Prerequisites
+-   Java 21+
+-   Node.js (and pnpm)
+
+### Setup
+1.  Navigate to the web app directory: `cd src/main/resources/web`
+2.  Install dependencies: `pnpm install`
+
+### Running
+Run the helper script from the project root:
+```powershell
+.\dev.ps1
+```
+This will start both:
+-   **Minecraft Client**: `./gradlew runClient` (configured to serve web files from `src/main/resources/web/dist`)
+-   **Web App Watcher**: `pnpm run watch` (rebuilds files on change)
+
+### Accessing the App
+Open `http://localhost:27134` (The mod's internal server).
+Since the mod is serving the files directly from the build output, you will see your changes upon **refreshing the page** (Live Reload, effectively).
+
+### Hot Reload
+-   **Web**: Edit files in `src/main/resources/web`. Vite will rebuild them (~100ms). Refresh the page to see changes.
+-   **Java**: Use your IDE's "Reload Changed Classes" (HotSwap) to apply changes comfortably.
+
+
 ## License
 MIT

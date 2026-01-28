@@ -22,6 +22,7 @@ public class McLiveTrackerMod implements ModInitializer {
     public void onInitialize() {
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             serverRef.set(server);
+            webServer.setSeed(server.getOverworld().getSeed());
             webServer.start();
         });
 
@@ -52,12 +53,16 @@ public class McLiveTrackerMod implements ModInitializer {
         int def = 27134;
         try {
             String prop = System.getProperty("mclivetracker.port");
-            if (prop != null && !prop.isEmpty()) return Integer.parseInt(prop);
-        } catch (NumberFormatException ignored) {}
+            if (prop != null && !prop.isEmpty())
+                return Integer.parseInt(prop);
+        } catch (NumberFormatException ignored) {
+        }
         try {
             String env = System.getenv("MCLIVETRACKER_PORT");
-            if (env != null && !env.isEmpty()) return Integer.parseInt(env);
-        } catch (NumberFormatException ignored) {}
+            if (env != null && !env.isEmpty())
+                return Integer.parseInt(env);
+        } catch (NumberFormatException ignored) {
+        }
         return def;
     }
 }

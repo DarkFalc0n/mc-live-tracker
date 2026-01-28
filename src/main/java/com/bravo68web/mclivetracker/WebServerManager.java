@@ -8,7 +8,6 @@ import com.sun.net.httpserver.HttpServer;
 
 import java.io.*;
 import java.net.InetSocketAddress;
-import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.*;
@@ -27,6 +26,11 @@ public class WebServerManager {
 
     private final List<PlayerPosition> latestPositions = new CopyOnWriteArrayList<>();
     private final List<SseClient> sseClients = new CopyOnWriteArrayList<>();
+    private long seed;
+
+    public void setSeed(long seed) {
+        this.seed = seed;
+    }
 
     private static final Pattern TILE_PATTERN = Pattern.compile("^/api/tile/([0-9]+)/([0-9]+)/([0-9]+)\\.png$");
 
@@ -39,10 +43,11 @@ public class WebServerManager {
             server = HttpServer.create(new InetSocketAddress(port), 0);
             executor = Executors.newCachedThreadPool();
             server.setExecutor(executor);
-            server.createContext("/", new RootHandler());
+            server.createContext("/", new StaticHandler("web/dist"));
             server.createContext("/api/players", new PlayersHandler());
             server.createContext("/events", new EventsHandler());
             server.createContext("/api/tile", new TileHandler());
+            server.createContext("/api/seed", new SeedHandler());
             server.start();
             System.out.println("[mc-live-tracker] Web server started on http://localhost:" + port);
         } catch (IOException e) {
@@ -52,13 +57,18 @@ public class WebServerManager {
 
     public void stop() {
         try {
-            if (server != null) server.stop(0);
+            if (server != null)
+                server.stop(0);
         } finally {
             for (SseClient c : sseClients) {
-                try { c.close(); } catch (Exception ignored) {}
+                try {
+                    c.close();
+                } catch (Exception ignored) {
+                }
             }
             sseClients.clear();
-            if (executor != null) executor.shutdownNow();
+            if (executor != null)
+                executor.shutdownNow();
         }
     }
 
@@ -79,24 +89,97 @@ public class WebServerManager {
         }
     }
 
-    private class RootHandler implements HttpHandler {
+    private class StaticHandler implements HttpHandler {
+        private final String resourceRoot;
+        private final java.nio.file.Path fileSystemRoot;
+
+        public StaticHandler(String resourceRoot) {
+            this.resourceRoot = resourceRoot;
+            String devPath = System.getProperty("mclivetracker.dev.web-root");
+            this.fileSystemRoot = devPath != null ? java.nio.file.Paths.get(devPath) : null;
+        }
+
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            URI uri = exchange.getRequestURI();
-            String path = uri.getPath();
-            if (path.equals("/") || path.equals("/index.html")) {
-                sendResource(exchange, "web/index.html", "text/html; charset=utf-8");
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendMethodNotAllowed(exchange);
                 return;
             }
-            if (path.equals("/app.js")) {
-                sendResource(exchange, "web/app.js", "application/javascript; charset=utf-8");
+
+            String path = exchange.getRequestURI().getPath();
+            if (path.equals("/")) {
+                path = "/index.html";
+            }
+
+            // Security check to prevent directory traversal
+            if (path.contains("..")) {
+                sendNotFound(exchange);
                 return;
             }
-            if (path.equals("/styles.css")) {
-                sendResource(exchange, "web/styles.css", "text/css; charset=utf-8");
+
+            String contentType = determineContentType(path);
+
+            // Try filesystem first if in dev mode
+            if (fileSystemRoot != null) {
+                // Remove leading slash for resolve
+                String relPath = path.startsWith("/") ? path.substring(1) : path;
+                java.nio.file.Path file = fileSystemRoot.resolve(relPath).normalize();
+
+                // Ensure we are still within root
+                if (!file.startsWith(fileSystemRoot)) {
+                    sendNotFound(exchange);
+                    return;
+                }
+
+                if (java.nio.file.Files.exists(file) && !java.nio.file.Files.isDirectory(file)) {
+                    byte[] bytes = java.nio.file.Files.readAllBytes(file);
+                    // Disable caching in dev environment
+                    exchange.getResponseHeaders().add("Cache-Control", "no-cache, no-store, must-revalidate");
+                    sendResponse(exchange, bytes, contentType);
+                    return;
+                }
+            } else {
+                // System.out.println("[Dev] fileSystemRoot is null, using Classpath for: " +
+                // path);
+            }
+
+            // Fallback to classpath
+            // resourceRoot is like "web/dist"
+            // path is like "/index.html"
+            String resourcePath = resourceRoot + path;
+            InputStream is = WebServerManager.class.getClassLoader().getResourceAsStream(resourcePath);
+            if (is != null) {
+                byte[] bytes = readAll(is);
+                sendResponse(exchange, bytes, contentType);
                 return;
             }
+
             sendNotFound(exchange);
+        }
+
+        private String determineContentType(String path) {
+            if (path.endsWith(".html"))
+                return "text/html; charset=utf-8";
+            if (path.endsWith(".js"))
+                return "application/javascript; charset=utf-8";
+            if (path.endsWith(".css"))
+                return "text/css; charset=utf-8";
+            if (path.endsWith(".png"))
+                return "image/png";
+            if (path.endsWith(".svg"))
+                return "image/svg+xml";
+            if (path.endsWith(".json"))
+                return "application/json; charset=utf-8";
+            return "application/octet-stream";
+        }
+
+        private void sendResponse(HttpExchange exchange, byte[] bytes, String contentType) throws IOException {
+            Headers h = exchange.getResponseHeaders();
+            h.add("Content-Type", contentType);
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(bytes);
+            }
         }
     }
 
@@ -164,40 +247,30 @@ public class WebServerManager {
         }
     }
 
-    private void sendResource(HttpExchange exchange, String resourcePath, String contentType) throws IOException {
-        InputStream is = WebServerManager.class.getClassLoader().getResourceAsStream(resourcePath);
-        if (is == null) {
-            sendNotFound(exchange);
-            return;
-        }
-        byte[] bytes = readAll(is);
-        Headers h = exchange.getResponseHeaders();
-        h.add("Content-Type", contentType);
-        exchange.sendResponseHeaders(200, bytes.length);
-        try (OutputStream os = exchange.getResponseBody()) {
-            os.write(bytes);
-        }
-    }
-
     private void sendNotFound(HttpExchange exchange) throws IOException {
         byte[] msg = "Not Found".getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "text/plain; charset=utf-8");
         exchange.sendResponseHeaders(404, msg.length);
-        try (OutputStream os = exchange.getResponseBody()) { os.write(msg); }
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write(msg);
+        }
     }
 
     private void sendMethodNotAllowed(HttpExchange exchange) throws IOException {
         byte[] msg = "Method Not Allowed".getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "text/plain; charset=utf-8");
         exchange.sendResponseHeaders(405, msg.length);
-        try (OutputStream os = exchange.getResponseBody()) { os.write(msg); }
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write(msg);
+        }
     }
 
     private static byte[] readAll(InputStream is) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         byte[] buf = new byte[8192];
         int r;
-        while ((r = is.read(buf)) != -1) baos.write(buf, 0, r);
+        while ((r = is.read(buf)) != -1)
+            baos.write(buf, 0, r);
         return baos.toByteArray();
     }
 
@@ -205,12 +278,15 @@ public class WebServerManager {
         private final HttpExchange exchange;
         private final OutputStream os;
         private boolean open = true;
+
         SseClient(HttpExchange exchange) throws IOException {
             this.exchange = exchange;
             this.os = exchange.getResponseBody();
         }
+
         boolean send(String json) {
-            if (!open) return false;
+            if (!open)
+                return false;
             try {
                 String msg = "data: " + json + "\n\n";
                 os.write(msg.getBytes(StandardCharsets.UTF_8));
@@ -221,11 +297,35 @@ public class WebServerManager {
                 return false;
             }
         }
+
         void close() {
-            if (!open) return;
+            if (!open)
+                return;
             open = false;
-            try { os.close(); } catch (IOException ignored) {}
+            try {
+                os.close();
+            } catch (IOException ignored) {
+            }
             exchange.close();
+        }
+    }
+
+    private class SeedHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendMethodNotAllowed(exchange);
+                return;
+            }
+            Map<String, Object> response = new HashMap<>();
+            response.put("seed", seed);
+            byte[] bytes = GSON.toJson(response).getBytes(StandardCharsets.UTF_8);
+            Headers h = exchange.getResponseHeaders();
+            h.add("Content-Type", "application/json; charset=utf-8");
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(bytes);
+            }
         }
     }
 }
