@@ -10,3 +10,6 @@ out/
 
 # OS
 .DS_Store
+
+# Minecraft dev runtime
+run/
