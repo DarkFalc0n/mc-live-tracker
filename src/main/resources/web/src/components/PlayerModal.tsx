@@ -23,7 +23,7 @@ const PlayerModal: FCProps<PlayerModalProps> = ({
   };
 
   const formatCoord = (coord: number) => Math.round(coord);
-  const [seed, setSeed] = useState<number>(0);
+  const [seed, setSeed] = useState<string>('');
 
   useEffect(() => {
     async function getSeedData() {

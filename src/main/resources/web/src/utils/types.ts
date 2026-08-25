@@ -14,3 +14,22 @@ export interface Player {
   pitch: number;
   dimension: string;
 }
+
+export interface WorldMetadata {
+  minecraftVersion: string;
+  modId: string;
+  modVersion: string;
+  levelName: string;
+  seed: string;
+  difficulty: string;
+  gameMode: string;
+  hardcore: boolean;
+  dataVersion: number;
+  dimensions: string[];
+  spawn: {
+    x: number;
+    y: number;
+    z: number;
+    dimension: string;
+  };
+}

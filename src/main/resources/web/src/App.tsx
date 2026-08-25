@@ -1,5 +1,6 @@
 import './App.css';
 import Header from './components/Header';
+import WorldMap from './components/WorldMap';
 import { useEffect, useState } from 'react';
 import PlayerModal from './components/PlayerModal';
 import type { Player } from './utils/types';
@@ -22,11 +23,12 @@ function App() {
   }, []);
 
   return (
-    <div>
+    <div className="h-screen flex flex-col">
       <Header
         playerCount={players.length}
         onToggle={() => setIsModalOpen(!isModalOpen)}
       />
+      <WorldMap />
       <PlayerModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}

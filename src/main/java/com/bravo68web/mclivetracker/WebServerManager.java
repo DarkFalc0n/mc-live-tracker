@@ -26,10 +26,15 @@ public class WebServerManager {
 
     private final List<PlayerPosition> latestPositions = new CopyOnWriteArrayList<>();
     private final List<SseClient> sseClients = new CopyOnWriteArrayList<>();
+    private volatile Map<String, Object> metadata = Collections.emptyMap();
     private long seed;
 
     public void setSeed(long seed) {
         this.seed = seed;
+    }
+
+    public void setMetadata(Map<String, Object> metadata) {
+        this.metadata = metadata != null ? metadata : Collections.emptyMap();
     }
 
     private static final Pattern TILE_PATTERN = Pattern.compile("^/api/tile/([0-9]+)/([0-9]+)/([0-9]+)\\.png$");
@@ -48,6 +53,7 @@ public class WebServerManager {
             server.createContext("/events", new EventsHandler());
             server.createContext("/api/tile", new TileHandler());
             server.createContext("/api/seed", new SeedHandler());
+            server.createContext("/api/metadata", new MetadataHandler());
             server.start();
             System.out.println("[mc-live-tracker] Web server started on http://localhost:" + port);
         } catch (IOException e) {
@@ -318,8 +324,25 @@ public class WebServerManager {
                 return;
             }
             Map<String, Object> response = new HashMap<>();
-            response.put("seed", seed);
+            response.put("seed", Long.toString(seed));
             byte[] bytes = GSON.toJson(response).getBytes(StandardCharsets.UTF_8);
+            Headers h = exchange.getResponseHeaders();
+            h.add("Content-Type", "application/json; charset=utf-8");
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(bytes);
+            }
+        }
+    }
+
+    private class MetadataHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendMethodNotAllowed(exchange);
+                return;
+            }
+            byte[] bytes = GSON.toJson(metadata).getBytes(StandardCharsets.UTF_8);
             Headers h = exchange.getResponseHeaders();
             h.add("Content-Type", "application/json; charset=utf-8");
             exchange.sendResponseHeaders(200, bytes.length);
